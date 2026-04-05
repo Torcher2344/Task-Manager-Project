@@ -1,0 +1,14 @@
+# Cursor Rules for Bug Bounty Swarm
+
+always_read: ["CLAUDE.md", "skills/recon/SKILL.md"]
+rate_limit: 10  # requests per second max
+scope_check: required
+destructive_actions: forbidden
+auto_submit: false
+
+coding_standards:
+  - Use async Python (asyncio + aiohttp)
+  - Type hints on all functions
+  - Docstrings on all classes and methods
+  - Error handling: never let one agent crash the swarm
+  - All HTTP via aiohttp.ClientSession with timeout=30

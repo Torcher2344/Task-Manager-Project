@@ -1,0 +1,46 @@
+name: web_app_full
+version: 1
+mode: full
+
+metadata:
+  description: Full web application hunting flow with recon, hunting, validation, and reporting.
+
+phases:
+  - name: scope
+    steps:
+      - load_scope_file
+      - validate_scope
+
+  - name: recon
+    steps:
+      - subdomain_enumeration
+      - live_host_discovery
+      - endpoint_collection
+      - tech_fingerprinting
+
+  - name: hunt
+    steps:
+      - idor
+      - ssrf
+      - xss
+      - oauth
+      - race_conditions
+      - business_logic
+      - secret_discovery
+
+  - name: validate
+    steps:
+      - reproducibility_3_of_3
+      - scope_confirmation
+      - deduplication
+      - cvss_scoring
+
+  - name: report
+    steps:
+      - platform_markdown_generation
+      - human_in_the_loop_review
+
+constraints:
+  no_destructive_actions: true
+  rate_limit_per_host: 10
+  auto_submit: false
