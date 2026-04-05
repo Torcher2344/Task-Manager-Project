@@ -1,0 +1,15 @@
+config/.env
+loot/*
+reports/*
+tools/*
+knowledge/*
+recon/*
+*.log
+__pycache__/
+!loot/.gitkeep
+!loot/sessions/.gitkeep
+!loot/notes.json
+!reports/.gitkeep
+!tools/.gitkeep
+!knowledge/.gitkeep
+!recon/.gitkeep

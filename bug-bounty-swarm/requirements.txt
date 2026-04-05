@@ -1,0 +1,10 @@
+anthropic
+aiohttp
+asyncio
+python-dotenv
+rich
+typer
+pydantic
+requests
+beautifulsoup4
+lxml
