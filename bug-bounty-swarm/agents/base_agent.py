@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit
 
 import aiohttp
 
@@ -76,8 +77,29 @@ class BaseAgent:
 
     def _host_from_target(self, value: str) -> str:
         """Extract host from URL-like or host-only values."""
-        host = re.sub(r"^https?://", "", value.strip(), flags=re.IGNORECASE)
+        raw = str(value or "").strip()
+        if not raw:
+            return ""
+
+        # Accept host-only values by promoting them to HTTPS for parsing.
+        if not re.match(r"^[a-zA-Z][a-zA-Z0-9+.\-]*://", raw):
+            raw = f"https://{raw.lstrip('/')}"
+
+        parsed = urlsplit(raw)
+        if parsed.hostname:
+            return parsed.hostname.lower()
+
+        host = re.sub(r"^https?://", "", raw, flags=re.IGNORECASE)
         return host.split("/")[0].lower()
+
+    def _normalize_request_url(self, url: str) -> str:
+        """Normalize host-only values into valid HTTP(S) URLs."""
+        raw = str(url or "").strip()
+        if not raw:
+            return raw
+        if re.match(r"^https?://", raw, flags=re.IGNORECASE):
+            return raw
+        return f"https://{raw.lstrip('/')}"
 
     def check_scope(self, candidate: str) -> bool:
         """Validate target candidate against in-scope definitions."""
@@ -118,16 +140,17 @@ class BaseAgent:
         allow_redirects: bool = True,
     ) -> Dict[str, Any]:
         """Send a scoped, rate-limited HTTP request and return normalized response."""
-        if not self.check_scope(url):
-            raise PermissionError(f"Out-of-scope request blocked: {url}")
+        normalized_url = self._normalize_request_url(url)
+        if not self.check_scope(normalized_url):
+            raise PermissionError(f"Out-of-scope request blocked: {normalized_url}")
 
-        host = self._host_from_target(url)
+        host = self._host_from_target(normalized_url)
         await self.rate_limit(host)
 
         try:
             async with self.session.request(
                 method=method.upper(),
-                url=url,
+                url=normalized_url,
                 headers=headers,
                 params=params,
                 json=json_body,
@@ -142,12 +165,12 @@ class BaseAgent:
                     "body": text,
                     "content_length": len(text),
                 }
-                self.log(f"http {method.upper()} {url} -> {resp.status} len={len(text)}")
+                self.log(f"http {method.upper()} {normalized_url} -> {resp.status} len={len(text)}")
                 return payload
         except Exception as exc:
-            self.log(f"http_error {method.upper()} {url} :: {exc}")
+            self.log(f"http_error {method.upper()} {normalized_url} :: {exc}")
             return {
-                "url": url,
+                "url": normalized_url,
                 "status": 0,
                 "headers": {},
                 "body": "",
