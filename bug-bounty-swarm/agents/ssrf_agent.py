@@ -48,12 +48,16 @@ class SSRFAgent(BaseAgent):
                         "endpoint": endpoint,
                         "parameter": param,
                         "payload": payload,
-                        "evidence": {
-                            "status": resp.get("status"),
+                        "evidence": self.build_evidence(
+                            response=resp,
+                            method="GET",
+                            request_url=probe_url,
+                            extra={
                             "marker_detected": marker,
                             "header_leak": header_leak,
                             "callback_hint": callback_hint,
-                        },
+                            },
+                        ),
                         "confidence": 0.84 if marker else 0.65,
                         "requires_human_review": severity == "high",
                     }

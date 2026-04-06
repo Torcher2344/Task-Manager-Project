@@ -19,7 +19,12 @@ class LogicBugAgent(BaseAgent):
             "severity": "high" if vulnerable else "info",
             "endpoint": endpoint,
             "parameter": "quantity",
-            "evidence": {"status": resp.get("status"), "accepted_negative_quantity": vulnerable},
+            "evidence": self.build_evidence(
+                response=resp,
+                method="POST",
+                request_url=endpoint,
+                extra={"accepted_negative_quantity": vulnerable},
+            ),
             "confidence": 0.72 if vulnerable else 0.2,
             "requires_human_review": vulnerable,
         }
@@ -33,7 +38,12 @@ class LogicBugAgent(BaseAgent):
             "severity": "medium" if vulnerable else "info",
             "endpoint": endpoint,
             "parameter": "step",
-            "evidence": {"status": resp.get("status"), "workflow_skipped": vulnerable},
+            "evidence": self.build_evidence(
+                response=resp,
+                method="POST",
+                request_url=endpoint,
+                extra={"workflow_skipped": vulnerable},
+            ),
             "confidence": 0.66 if vulnerable else 0.2,
             "requires_human_review": vulnerable,
         }
@@ -47,7 +57,12 @@ class LogicBugAgent(BaseAgent):
             "severity": "high" if vulnerable else "info",
             "endpoint": endpoint,
             "parameter": "role",
-            "evidence": {"status": resp.get("status"), "accepted_admin_role": vulnerable},
+            "evidence": self.build_evidence(
+                response=resp,
+                method="POST",
+                request_url=endpoint,
+                extra={"accepted_admin_role": vulnerable},
+            ),
             "confidence": 0.75 if vulnerable else 0.18,
             "requires_human_review": vulnerable,
         }

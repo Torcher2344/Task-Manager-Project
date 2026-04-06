@@ -73,7 +73,43 @@ class BaseAgent:
         with self._session_log_path().open("a", encoding="utf-8") as handle:
             handle.write(log_line)
         if self.config.get("debug"):
-            print(f"[{self.agent_name}] {message}")
+            print(f"[INFO][{self.agent_name}] {message}")
+
+    @staticmethod
+    def clean_json_response(raw: str) -> str:
+        """Strip markdown code fences before JSON parsing."""
+        cleaned = str(raw or "").strip()
+        if cleaned.startswith("```"):
+            cleaned = re.sub(r"^```[A-Za-z0-9_-]*\s*", "", cleaned, count=1)
+            cleaned = re.sub(r"\s*```$", "", cleaned, count=1)
+        return cleaned.strip()
+
+    def build_evidence(
+        self,
+        *,
+        response: Optional[Dict[str, Any]] = None,
+        method: str = "GET",
+        request_url: str = "",
+        response_snippet: Optional[str] = None,
+        extra: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Create standardized evidence payload for findings."""
+        status_code = response.get("status") if response else None
+        evidence_url = request_url
+        if not evidence_url and response:
+            evidence_url = str(response.get("url", ""))
+        snippet_source = response_snippet
+        if snippet_source is None and response is not None:
+            snippet_source = str(response.get("body", ""))
+        evidence = {
+            "status_code": status_code,
+            "response_snippet": str(snippet_source or "")[:200],
+            "request_url": evidence_url,
+            "method": str(method or "GET").upper(),
+        }
+        if extra:
+            evidence.update(extra)
+        return evidence
 
     def _host_from_target(self, value: str) -> str:
         """Extract host from URL-like or host-only values."""
@@ -182,7 +218,7 @@ class BaseAgent:
     def _file_lock(self, lock_path: Path):
         """Cross-platform advisory lock for file writes."""
         lock_path.parent.mkdir(parents=True, exist_ok=True)
-        with lock_path.open("a+") as lock_file:
+        with lock_path.open("a+", encoding="utf-8") as lock_file:
             if __import__("os").name == "nt":
                 import msvcrt
 
@@ -208,7 +244,7 @@ class BaseAgent:
             with self._file_lock(lock_path):
                 raw = self.notes_path.read_text(encoding="utf-8").strip() or "[]"
                 try:
-                    return json.loads(raw)
+                    return json.loads(self.clean_json_response(raw))
                 except json.JSONDecodeError:
                     self.log("notes_json_decode_error: resetting corrupted notes file")
                     return []
@@ -227,7 +263,7 @@ class BaseAgent:
             with self._file_lock(lock_path):
                 raw = self.notes_path.read_text(encoding="utf-8").strip() or "[]"
                 try:
-                    existing = json.loads(raw)
+                    existing = json.loads(self.clean_json_response(raw))
                     if not isinstance(existing, list):
                         existing = []
                 except json.JSONDecodeError:

@@ -38,12 +38,16 @@ class XSSAgent(BaseAgent):
             "endpoint": endpoint,
             "parameter": param,
             "payload": payload,
-            "evidence": {
-                "status": resp.get("status"),
-                "reflected": reflected,
-                "escaped": escaped,
-                "dom_hint": dom_hint,
-            },
+            "evidence": self.build_evidence(
+                response=resp,
+                method="GET",
+                request_url=url,
+                extra={
+                    "reflected": reflected,
+                    "escaped": escaped,
+                    "dom_hint": dom_hint,
+                },
+            ),
             "confidence": 0.8 if reflected and not escaped else 0.55,
             "requires_human_review": severity == "high",
         }
@@ -63,12 +67,17 @@ class XSSAgent(BaseAgent):
             "endpoint": endpoint,
             "parameter": param,
             "payload": payload,
-            "evidence": {
-                "submit_status": submit.get("status"),
-                "review_status": review.get("status"),
-                "reflected_after_store": reflected_later,
-                "escaped": escaped,
-            },
+            "evidence": self.build_evidence(
+                response=review,
+                method="POST",
+                request_url=endpoint,
+                extra={
+                    "submit_status": submit.get("status"),
+                    "review_status": review.get("status"),
+                    "reflected_after_store": reflected_later,
+                    "escaped": escaped,
+                },
+            ),
             "confidence": 0.77 if suspected else 0.2,
             "requires_human_review": suspected,
         }
