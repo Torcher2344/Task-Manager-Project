@@ -19,7 +19,12 @@ class OAuthAgent(BaseAgent):
                 "severity": "info",
                 "endpoint": endpoint,
                 "parameter": "state",
-                "evidence": {"skipped": "out_of_scope"},
+                "evidence": self.build_evidence(
+                    method="GET",
+                    request_url=endpoint,
+                    response_snippet="out_of_scope",
+                    extra={"skipped": "out_of_scope"},
+                ),
                 "confidence": 0.0,
                 "requires_human_review": False,
             }
@@ -31,7 +36,12 @@ class OAuthAgent(BaseAgent):
             "severity": "high" if vulnerable else "info",
             "endpoint": endpoint,
             "parameter": "state",
-            "evidence": {"status": resp.get("status"), "state_required": not vulnerable},
+            "evidence": self.build_evidence(
+                response=resp,
+                method="GET",
+                request_url=url,
+                extra={"state_required": not vulnerable},
+            ),
             "confidence": 0.76 if vulnerable else 0.2,
             "requires_human_review": vulnerable,
         }
@@ -44,7 +54,12 @@ class OAuthAgent(BaseAgent):
                 "severity": "info",
                 "endpoint": endpoint,
                 "parameter": "redirect_uri",
-                "evidence": {"skipped": "out_of_scope"},
+                "evidence": self.build_evidence(
+                    method="GET",
+                    request_url=endpoint,
+                    response_snippet="out_of_scope",
+                    extra={"skipped": "out_of_scope"},
+                ),
                 "confidence": 0.0,
                 "requires_human_review": False,
             }
@@ -58,7 +73,13 @@ class OAuthAgent(BaseAgent):
             "severity": "high" if vulnerable else "info",
             "endpoint": endpoint,
             "parameter": "redirect_uri",
-            "evidence": {"status": resp.get("status"), "location": location[:180]},
+            "evidence": self.build_evidence(
+                response=resp,
+                method="GET",
+                request_url=url,
+                response_snippet=location,
+                extra={"location": location[:180]},
+            ),
             "confidence": 0.82 if vulnerable else 0.22,
             "requires_human_review": vulnerable,
         }
@@ -71,7 +92,12 @@ class OAuthAgent(BaseAgent):
                 "severity": "info",
                 "endpoint": token_endpoint,
                 "parameter": "code_verifier",
-                "evidence": {"skipped": "out_of_scope"},
+                "evidence": self.build_evidence(
+                    method="POST",
+                    request_url=token_endpoint,
+                    response_snippet="out_of_scope",
+                    extra={"skipped": "out_of_scope"},
+                ),
                 "confidence": 0.0,
                 "requires_human_review": False,
             }
@@ -89,7 +115,13 @@ class OAuthAgent(BaseAgent):
             "severity": "high" if vulnerable else "info",
             "endpoint": token_endpoint,
             "parameter": "code_verifier",
-            "evidence": {"status": resp.get("status"), "body_snippet": body[:180]},
+            "evidence": self.build_evidence(
+                response=resp,
+                method="POST",
+                request_url=token_endpoint,
+                response_snippet=body,
+                extra={"body_snippet": body[:180]},
+            ),
             "confidence": 0.79 if vulnerable else 0.2,
             "requires_human_review": vulnerable,
         }
@@ -102,7 +134,12 @@ class OAuthAgent(BaseAgent):
                 "severity": "info",
                 "endpoint": callback_url,
                 "parameter": "access_token",
-                "evidence": {"skipped": "out_of_scope"},
+                "evidence": self.build_evidence(
+                    method="GET",
+                    request_url=callback_url,
+                    response_snippet="out_of_scope",
+                    extra={"skipped": "out_of_scope"},
+                ),
                 "confidence": 0.0,
                 "requires_human_review": False,
             }
@@ -121,11 +158,16 @@ class OAuthAgent(BaseAgent):
             "severity": "high" if leaked else "info",
             "endpoint": callback_url,
             "parameter": "access_token",
-            "evidence": {
-                "status": resp.get("status"),
-                "location_snippet": location[:180],
-                "body_snippet": body[:180],
-            },
+            "evidence": self.build_evidence(
+                response=resp,
+                method="GET",
+                request_url=leak_url,
+                response_snippet=f"{location}\n{body}",
+                extra={
+                    "location_snippet": location[:180],
+                    "body_snippet": body[:180],
+                },
+            ),
             "confidence": 0.74 if leaked else 0.2,
             "requires_human_review": leaked,
         }

@@ -46,12 +46,18 @@ class RaceAgent(BaseAgent):
             analysis = self._analyze(responses)
             if not analysis["suspect"]:
                 continue
+            first_resp = responses[0] if responses else {}
             finding = {
                 "vuln_type": "race_condition",
                 "severity": "high",
                 "endpoint": url,
                 "parameter": "concurrency",
-                "evidence": analysis,
+                "evidence": self.build_evidence(
+                    response=first_resp,
+                    method=method,
+                    request_url=url,
+                    extra=analysis,
+                ),
                 "confidence": 0.74,
                 "requires_human_review": True,
             }

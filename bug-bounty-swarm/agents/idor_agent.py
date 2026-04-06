@@ -144,7 +144,12 @@ class IDORAgent(BaseAgent):
             "endpoint": baseline_url,
             "parameter": "path_or_query_id",
             "payload": candidate_url,
-            "evidence": evidence,
+            "evidence": self.build_evidence(
+                response=probe,
+                method="GET",
+                request_url=candidate_url,
+                extra=evidence,
+            ),
             "confidence": 0.82 if severity == "high" else 0.68,
             "requires_human_review": severity == "high",
             "repro_steps": [

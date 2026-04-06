@@ -33,7 +33,13 @@ class SecretFindAgent(BaseAgent):
                         "severity": "medium",
                         "endpoint": url,
                         "parameter": name,
-                        "evidence": {"match": match.group(0)[:60]},
+                        "evidence": self.build_evidence(
+                            response=resp,
+                            method="GET",
+                            request_url=url,
+                            response_snippet=body,
+                            extra={"match": match.group(0)[:60]},
+                        ),
                         "confidence": 0.7,
                         "requires_human_review": True,
                     }

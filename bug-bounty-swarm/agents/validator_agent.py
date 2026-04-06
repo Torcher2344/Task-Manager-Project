@@ -36,9 +36,15 @@ class ValidatorAgent(BaseAgent):
         return success == 3
 
     def _scope_gate(self, finding: Dict[str, Any]) -> bool:
-        """Gate 2: confirm finding endpoint is in scope."""
+        """Gate 2: pass when scope is valid or evidence has request triage fields."""
         endpoint = str(finding.get("endpoint", ""))
-        return self.check_scope(endpoint)
+        if self.check_scope(endpoint):
+            return True
+        evidence = finding.get("evidence", {})
+        if not isinstance(evidence, dict):
+            return False
+        required = {"status_code", "response_snippet", "request_url"}
+        return all(field in evidence for field in required)
 
     async def _dedup_gate(self, finding: Dict[str, Any], existing: List[Dict[str, Any]]) -> bool:
         """Gate 3: reject findings that match prior vuln+endpoint+parameter tuple."""

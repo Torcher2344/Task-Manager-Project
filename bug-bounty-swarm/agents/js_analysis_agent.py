@@ -67,7 +67,12 @@ class JSAnalysisAgent(BaseAgent):
                 "severity": "info",
                 "endpoint": js_url,
                 "parameter": "script",
-                "evidence": extracted,
+                "evidence": self.build_evidence(
+                    response=resp,
+                    method="GET",
+                    request_url=js_url,
+                    extra=extracted,
+                ),
                 "confidence": 0.6,
                 "requires_human_review": False,
             }

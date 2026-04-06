@@ -5,12 +5,22 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict
 
 from agents.queen_agent import QueenAgent
 from config.settings import DEFAULT_CONFIG
+
+
+def clean_json_response(raw: str) -> str:
+    """Strip markdown code fences before JSON parsing."""
+    cleaned = str(raw or "").strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```[A-Za-z0-9_-]*\s*", "", cleaned, count=1)
+        cleaned = re.sub(r"\s*```$", "", cleaned, count=1)
+    return cleaned.strip()
 
 
 def parse_args() -> argparse.Namespace:
@@ -70,7 +80,7 @@ def build_config(args: argparse.Namespace) -> Dict[str, Any]:
             raise FileNotFoundError(f"Scope file not found: {args.scope_file}")
         raw = args.scope_file.read_text(encoding="utf-8").strip()
         if args.scope_file.suffix.lower() == ".json":
-            config["scope"] = json.loads(raw)
+            config["scope"] = json.loads(clean_json_response(raw))
         else:
             config["scope"] = [line.strip() for line in raw.splitlines() if line.strip()]
 
@@ -91,7 +101,7 @@ def main() -> int:
         config = build_config(args)
         result = asyncio.run(run_swarm(args.target, config))
     except Exception as exc:  # pragma: no cover - defensive CLI guard
-        print(f"[swarm] fatal error: {exc}", file=sys.stderr)
+        print(f"[FAIL][swarm] fatal error: {exc}", file=sys.stderr)
         return 1
 
     print(json.dumps(result, indent=2))
