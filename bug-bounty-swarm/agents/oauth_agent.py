@@ -174,10 +174,19 @@ class OAuthAgent(BaseAgent):
 
     async def run(self) -> Dict[str, Any]:
         """Execute OAuth test battery against common auth endpoints."""
-        base = self.target if self.target.startswith("http") else f"https://{self.target}"
-        auth_endpoint = f"{base.rstrip('/')}/oauth/authorize"
-        token_endpoint = f"{base.rstrip('/')}/oauth/token"
-        callback_endpoint = f"{base.rstrip('/')}/oauth/callback"
+        discovered_urls = self.discovered_urls()
+        auth_endpoint = next(
+            (url for url in discovered_urls if url.lower().endswith("/bank/login.aspx")),
+            discovered_urls[0],
+        )
+        token_endpoint = next(
+            (url for url in discovered_urls if url.lower().endswith("/bank/main.aspx")),
+            discovered_urls[0],
+        )
+        callback_endpoint = next(
+            (url for url in discovered_urls if url.lower().endswith("/search.aspx")),
+            discovered_urls[0],
+        )
 
         candidates = [
             await self._test_state_missing(auth_endpoint),

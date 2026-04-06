@@ -75,6 +75,27 @@ class QueenAgent(BaseAgent):
                 "meta": {"error": str(exc)},
             }
 
+    def _extract_discovered_urls(self, blocks: List[Dict[str, Any]]) -> List[str]:
+        """Collect recon-discovered URL candidates for downstream hunt agents."""
+        discovered: set[str] = set()
+        for block in blocks:
+            meta = block.get("meta", {})
+            for url in meta.get("discovered_urls", []) if isinstance(meta, dict) else []:
+                value = str(url).strip()
+                if value:
+                    discovered.add(value)
+
+            findings = block.get("findings", [])
+            for finding in findings if isinstance(findings, list) else []:
+                evidence = finding.get("evidence", {})
+                if not isinstance(evidence, dict):
+                    continue
+                for url in evidence.get("discovered_urls", []):
+                    value = str(url).strip()
+                    if value:
+                        discovered.add(value)
+        return sorted(discovered)
+
     async def _anthropic_chain_hint(self, findings: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Optional Anthropic-assisted vuln chaining hints."""
         api_key = os.getenv("ANTHROPIC_API_KEY", "")
@@ -109,6 +130,10 @@ class QueenAgent(BaseAgent):
         if self.config.get("mode", "full") in {"recon", "full"}:
             for agent_cls in [ReconAgent, JSAnalysisAgent, SecretFindAgent]:
                 recon_results.append(await self._run_agent(agent_cls))
+
+        discovered_urls = self._extract_discovered_urls(recon_results)
+        if discovered_urls:
+            self.config["discovered_urls"] = discovered_urls
 
         if self.config.get("mode", "full") in {"hunt", "full"}:
             tasks = [self._run_agent(agent_cls) for agent_cls in self._selected_agents()]
@@ -146,6 +171,7 @@ class QueenAgent(BaseAgent):
                 "deduplicated": deduped,
                 "report": report_result,
                 "chain_hints": chain_hints,
+                "discovered_urls": discovered_urls,
                 "ctf_mode": bool(self.config.get("ctf", False)),
                 "no_submit": bool(self.config.get("no_submit", True)),
             },

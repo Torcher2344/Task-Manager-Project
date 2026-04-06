@@ -14,6 +14,17 @@ from agents.base_agent import BaseAgent
 class ReconAgent(BaseAgent):
     """Enumerates assets, checks liveness, and fingerprints technologies."""
 
+    TESTFIRE_PATHS = [
+        "/index.jsp",
+        "/bank/login.aspx",
+        "/bank/main.aspx",
+        "/bank/transfer.aspx",
+        "/bank/queryxpath.aspx",
+        "/bank/login",
+        "/search.aspx",
+        "/bank/customize.aspx",
+    ]
+
     async def _run_tool(self, command: List[str]) -> str:
         """Execute a local tool command and return stdout."""
         proc = await asyncio.create_subprocess_exec(
@@ -64,6 +75,19 @@ class ReconAgent(BaseAgent):
                     live.append(url)
                     break
         return live
+
+    async def _discover_known_testfire_urls(self, host_urls: List[str]) -> List[str]:
+        """Probe known Testfire paths when external recon tools are unavailable."""
+        discovered: List[str] = []
+        for host_url in host_urls:
+            for path in self.TESTFIRE_PATHS:
+                candidate = f"{host_url.rstrip('/')}{path}"
+                if not self.check_scope(candidate):
+                    continue
+                resp = await self.request("GET", candidate, allow_redirects=False)
+                if resp.get("status") == 200:
+                    discovered.append(candidate)
+        return sorted(set(discovered))
 
     async def _port_scan(self, host: str) -> List[int]:
         """Run nmap fallback or Python socket checks."""
@@ -119,8 +143,19 @@ class ReconAgent(BaseAgent):
         findings: List[Dict[str, Any]] = []
         subs = await self._subdomains()
         live = await self._live_hosts(subs)
+        known_hosts = sorted(set(live))
 
-        for asset in live:
+        base_target = self._base_target_url()
+        if base_target not in known_hosts and self.check_scope(base_target):
+            base_resp = await self.request("GET", base_target, allow_redirects=False)
+            if base_resp.get("status") == 200:
+                known_hosts.append(base_target)
+
+        discovered_urls = await self._discover_known_testfire_urls(known_hosts)
+        if not discovered_urls:
+            discovered_urls = [f"{base_target}{path}" for path in self.TESTFIRE_PATHS]
+
+        for asset in known_hosts:
             ports = await self._port_scan(asset)
             fp = await self._fingerprint(asset)
             finding = {
@@ -130,6 +165,7 @@ class ReconAgent(BaseAgent):
                 "evidence": {
                     "ports": ports,
                     "fingerprint": fp,
+                    "discovered_urls": discovered_urls,
                 },
                 "confidence": 0.85,
                 "requires_human_review": False,
@@ -145,5 +181,5 @@ class ReconAgent(BaseAgent):
             phase="recon",
             findings=findings,
             confidence=0.82 if findings else 0.35,
-            meta={"subdomains": subs, "live_hosts": live},
+            meta={"subdomains": subs, "live_hosts": known_hosts, "discovered_urls": discovered_urls},
         )

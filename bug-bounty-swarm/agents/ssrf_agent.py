@@ -53,9 +53,9 @@ class SSRFAgent(BaseAgent):
                             method="GET",
                             request_url=probe_url,
                             extra={
-                            "marker_detected": marker,
-                            "header_leak": header_leak,
-                            "callback_hint": callback_hint,
+                                "marker_detected": marker,
+                                "header_leak": header_leak,
+                                "callback_hint": callback_hint,
                             },
                         ),
                         "confidence": 0.84 if marker else 0.65,
@@ -66,14 +66,8 @@ class SSRFAgent(BaseAgent):
 
     async def run(self) -> Dict[str, Any]:
         """Execute SSRF scans against common URL sink endpoints."""
-        base = self.target if self.target.startswith("http") else f"https://{self.target}"
         callback_domain = self.config.get("callback_domain", "")
-        endpoints = [
-            f"{base.rstrip('/')}/fetch",
-            f"{base.rstrip('/')}/proxy",
-            f"{base.rstrip('/')}/webhook/test",
-            f"{base.rstrip('/')}/api/preview",
-        ]
+        endpoints = self.discovered_urls()
 
         findings: List[Dict[str, Any]] = []
         for endpoint in endpoints:

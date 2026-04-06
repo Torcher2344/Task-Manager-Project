@@ -84,12 +84,17 @@ class XSSAgent(BaseAgent):
 
     async def run(self) -> Dict[str, Any]:
         """Run reflected and DOM XSS heuristics against common endpoints."""
-        base = self.target if self.target.startswith("http") else f"https://{self.target}"
-        endpoints = [
-            (f"{base.rstrip('/')}/search", "q"),
-            (f"{base.rstrip('/')}/profile", "name"),
-            (f"{base.rstrip('/')}/feedback", "message"),
-        ]
+        endpoints: List[tuple[str, str]] = []
+        for url in self.discovered_urls():
+            lower_url = url.lower()
+            if "search" in lower_url:
+                endpoints.append((url, "query"))
+            elif "login" in lower_url:
+                endpoints.append((url, "uid"))
+            elif "customize" in lower_url:
+                endpoints.append((url, "nickname"))
+            else:
+                endpoints.append((url, "q"))
 
         findings: List[Dict[str, Any]] = []
         for endpoint, param in endpoints:

@@ -31,11 +31,10 @@ class RaceAgent(BaseAgent):
 
     async def run(self) -> Dict[str, Any]:
         """Run race probes on coupon, transfer, and voting endpoints."""
-        base = self.target if self.target.startswith("http") else f"https://{self.target}"
         probes = [
-            ("POST", f"{base.rstrip('/')}/api/coupon/redeem", {"coupon": "WELCOME100"}),
-            ("POST", f"{base.rstrip('/')}/api/wallet/transfer", {"to": "attacker", "amount": 1}),
-            ("POST", f"{base.rstrip('/')}/api/vote", {"poll_id": 1, "option": "A"}),
+            ("POST", url, {"amount": 1, "to": "attacker"})
+            for url in self.discovered_urls()
+            if any(keyword in url.lower() for keyword in ["transfer", "customize", "main"])
         ]
 
         findings: List[Dict[str, Any]] = []

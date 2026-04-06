@@ -5,10 +5,30 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import re
 import sys
 from pathlib import Path
 from typing import Any, Dict
+
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - fallback for minimal environments
+    def load_dotenv(dotenv_path: Path) -> bool:
+        """Fallback dotenv loader when python-dotenv is unavailable."""
+        path = Path(dotenv_path)
+        if not path.exists():
+            return False
+        for line in path.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or "=" not in stripped:
+                continue
+            key, value = stripped.split("=", 1)
+            os.environ.setdefault(key.strip(), value.strip().strip("\"'"))
+        return True
+
+# Load .env before importing agents so runtime keys are available globally.
+load_dotenv(dotenv_path=Path(__file__).parent / "config" / ".env")
 
 from agents.queen_agent import QueenAgent
 from config.settings import DEFAULT_CONFIG
@@ -96,6 +116,9 @@ async def run_swarm(target: str, config: Dict[str, Any]) -> Dict[str, Any]:
 def main() -> int:
     """CLI main wrapper."""
     args = parse_args()
+    api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+    key_state = "found" if api_key else "missing"
+    print(f"[INFO][startup] ANTHROPIC_API_KEY {key_state}")
 
     try:
         config = build_config(args)

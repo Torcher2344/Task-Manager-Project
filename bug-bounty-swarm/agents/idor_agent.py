@@ -162,13 +162,7 @@ class IDORAgent(BaseAgent):
 
     async def run(self) -> Dict[str, Any]:
         """Run IDOR checks over curated endpoint seeds and mutations."""
-        base = self.target if self.target.startswith("http") else f"https://{self.target}"
-        seeds = [
-            f"{base.rstrip('/')}/api/user/1",
-            f"{base.rstrip('/')}/api/users?id=1",
-            f"{base.rstrip('/')}/api/orders/1001",
-            f"{base.rstrip('/')}/profile?user_id=1",
-        ]
+        seeds = self.discovered_urls()
 
         findings: List[Dict[str, Any]] = []
         for seed in seeds:

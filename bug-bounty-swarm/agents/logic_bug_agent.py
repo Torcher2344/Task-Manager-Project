@@ -69,11 +69,15 @@ class LogicBugAgent(BaseAgent):
 
     async def run(self) -> Dict[str, Any]:
         """Run core business logic abuse tests."""
-        base = self.target if self.target.startswith("http") else f"https://{self.target}"
+        candidate_urls = self.discovered_urls()
+        lookup = {url.rstrip("/").lower(): url for url in candidate_urls}
+        transfer_url = lookup.get(f"{self._base_target_url()}/bank/transfer.aspx", "")
+        customize_url = lookup.get(f"{self._base_target_url()}/bank/customize.aspx", "")
+        login_url = lookup.get(f"{self._base_target_url()}/bank/login.aspx", "")
         tests = [
-            await self._probe_negative_quantity(f"{base.rstrip('/')}/api/cart/update"),
-            await self._probe_workflow_skip(f"{base.rstrip('/')}/api/checkout/transition"),
-            await self._probe_role_escalation(f"{base.rstrip('/')}/api/account/update-role"),
+            await self._probe_negative_quantity(transfer_url or candidate_urls[0]),
+            await self._probe_workflow_skip(customize_url or candidate_urls[0]),
+            await self._probe_role_escalation(login_url or candidate_urls[0]),
         ]
 
         findings = [item for item in tests if item.get("severity") != "info"]

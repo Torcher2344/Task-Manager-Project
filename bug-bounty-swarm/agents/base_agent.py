@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 import time
 from contextlib import contextmanager
@@ -19,6 +20,16 @@ class BaseAgent:
     """Common functionality for all bug bounty swarm agents."""
 
     _notes_lock = asyncio.Lock()
+    TESTFIRE_PATH_HINTS = [
+        "/index.jsp",
+        "/bank/login.aspx",
+        "/bank/main.aspx",
+        "/bank/transfer.aspx",
+        "/bank/queryxpath.aspx",
+        "/bank/login",
+        "/search.aspx",
+        "/bank/customize.aspx",
+    ]
 
     def __init__(self, target: str, config: Dict[str, Any]) -> None:
         """Initialize the shared agent state."""
@@ -32,6 +43,7 @@ class BaseAgent:
         self.rate_limit_per_host = float(config.get("rate_limit_per_host", 10))
         self.timeout = float(config.get("http_timeout", 30))
         self.scope = config.get("scope", [])
+        self.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
         self._last_request_time: Dict[str, float] = {}
         self._session: Optional[aiohttp.ClientSession] = None
 
@@ -110,6 +122,30 @@ class BaseAgent:
         if extra:
             evidence.update(extra)
         return evidence
+
+    def _base_target_url(self) -> str:
+        """Normalize configured target into a base URL."""
+        if self.target.startswith("http"):
+            return self.target.rstrip("/")
+        return f"https://{self.target}".rstrip("/")
+
+    def discovered_urls(self) -> List[str]:
+        """Return recon-discovered URLs with deterministic fallback paths."""
+        configured = self.config.get("discovered_urls", [])
+        normalized: List[str] = []
+        for item in configured if isinstance(configured, list) else []:
+            value = str(item).strip()
+            if not value:
+                continue
+            if value.startswith("http"):
+                normalized.append(value)
+            else:
+                normalized.append(f"{self._base_target_url()}/{value.lstrip('/')}")
+        if normalized:
+            return sorted(set(normalized))
+        base = self._base_target_url()
+        fallback = [f"{base}{path}" for path in self.TESTFIRE_PATH_HINTS]
+        return sorted(set(fallback))
 
     def _host_from_target(self, value: str) -> str:
         """Extract host from URL-like or host-only values."""
