@@ -12,7 +12,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlsplit
 
-import aiohttp
+try:
+    import aiohttp
+except ModuleNotFoundError:  # pragma: no cover - exercised in minimal test envs
+    aiohttp = None  # type: ignore[assignment]
 
 
 class BaseAgent:
@@ -25,6 +28,7 @@ class BaseAgent:
         self.target = target
         self.config = config
         self.agent_name = self.__class__.__name__
+        self.run_id = str(config.get("run_id", "")).strip()
         self.root_dir = Path(config.get("root_dir", Path(__file__).resolve().parents[1]))
         self.loot_dir = self.root_dir / "loot"
         self.sessions_dir = self.loot_dir / "sessions"
@@ -33,7 +37,8 @@ class BaseAgent:
         self.timeout = float(config.get("http_timeout", 30))
         self.scope = config.get("scope", [])
         self._last_request_time: Dict[str, float] = {}
-        self._session: Optional[aiohttp.ClientSession] = None
+        self._session: Optional["aiohttp.ClientSession"] = None
+        self._session_log_file = self._build_session_log_path()
 
         self.loot_dir.mkdir(parents=True, exist_ok=True)
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
@@ -42,6 +47,8 @@ class BaseAgent:
 
     async def __aenter__(self) -> "BaseAgent":
         """Open async HTTP session for this agent."""
+        if aiohttp is None:
+            raise RuntimeError("aiohttp is required for HTTP requests; install dependencies first")
         timeout = aiohttp.ClientTimeout(total=self.timeout)
         self._session = aiohttp.ClientSession(timeout=timeout)
         return self
@@ -52,7 +59,7 @@ class BaseAgent:
             await self._session.close()
 
     @property
-    def session(self) -> aiohttp.ClientSession:
+    def session(self) -> "aiohttp.ClientSession":
         """Expose HTTP session with safety checks."""
         if self._session is None:
             raise RuntimeError(f"{self.agent_name} session not initialized")
@@ -62,15 +69,16 @@ class BaseAgent:
         """Execute the agent and return handoff payload."""
         raise NotImplementedError("Subclasses must implement run()")
 
-    def _session_log_path(self) -> Path:
-        """Build a timestamped session log path for the agent."""
+    def _build_session_log_path(self) -> Path:
+        """Build one stable session log path for this agent instance."""
         ts = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        return self.sessions_dir / f"{ts}_{self.agent_name}.log"
+        run_suffix = f"_{self.run_id[:12]}" if self.run_id else ""
+        return self.sessions_dir / f"{ts}_{self.agent_name}{run_suffix}.log"
 
     def log(self, message: str) -> None:
         """Append a log line to the session log and print when debugging."""
         log_line = f"[{datetime.now(tz=timezone.utc).isoformat()}] {message}\n"
-        with self._session_log_path().open("a", encoding="utf-8") as handle:
+        with self._session_log_file.open("a", encoding="utf-8") as handle:
             handle.write(log_line)
         if self.config.get("debug"):
             print(f"[INFO][{self.agent_name}] {message}")
@@ -255,6 +263,7 @@ class BaseAgent:
             "agent": self.agent_name,
             "target": self.target,
             "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+            "run_id": self.run_id,
             **finding,
         }
 

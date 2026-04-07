@@ -7,10 +7,10 @@ import asyncio
 import json
 import re
 import sys
+import uuid
 from pathlib import Path
 from typing import Any, Dict
 
-from agents.queen_agent import QueenAgent
 from config.settings import DEFAULT_CONFIG
 
 
@@ -68,6 +68,7 @@ def parse_args() -> argparse.Namespace:
 def build_config(args: argparse.Namespace) -> Dict[str, Any]:
     """Build runtime config from defaults and CLI flags."""
     config: Dict[str, Any] = dict(DEFAULT_CONFIG)
+    config["run_id"] = str(uuid.uuid4())
     config["mode"] = args.mode
     config["platform"] = args.platform
     config["debug"] = bool(args.debug)
@@ -89,6 +90,8 @@ def build_config(args: argparse.Namespace) -> Dict[str, Any]:
 
 async def run_swarm(target: str, config: Dict[str, Any]) -> Dict[str, Any]:
     """Execute the swarm orchestration flow."""
+    from agents.queen_agent import QueenAgent
+
     queen = QueenAgent(target=target, config=config)
     return await queen.run()
 

@@ -21,7 +21,11 @@ class DeduplicatorAgent(BaseAgent):
     async def run_with_findings(self, findings: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Return only unique findings compared to prior notes and current batch."""
         existing = await self.read_findings()
-        seen: Set[Tuple[str, str, str]] = {self._key(item) for item in existing}
+        if self.run_id:
+            prior = [item for item in existing if str(item.get("run_id", "")) != self.run_id]
+        else:
+            prior = existing
+        seen: Set[Tuple[str, str, str]] = {self._key(item) for item in prior}
         deduped: List[Dict[str, Any]] = []
         duplicates: List[Dict[str, Any]] = []
 
@@ -41,6 +45,7 @@ class DeduplicatorAgent(BaseAgent):
                 "input_count": len(findings),
                 "deduped_count": len(deduped),
                 "duplicate_count": len(duplicates),
+                "prior_findings_considered": len(prior),
             },
         )
 

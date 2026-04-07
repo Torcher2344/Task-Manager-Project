@@ -12,6 +12,21 @@ class LogicBugAgent(BaseAgent):
 
     async def _probe_negative_quantity(self, endpoint: str) -> Dict[str, Any]:
         """Test negative quantity and price manipulation controls."""
+        if not self.check_scope(endpoint):
+            return {
+                "vuln_type": "business_logic",
+                "severity": "info",
+                "endpoint": endpoint,
+                "parameter": "quantity",
+                "evidence": self.build_evidence(
+                    method="POST",
+                    request_url=endpoint,
+                    response_snippet="out_of_scope",
+                    extra={"skipped": "out_of_scope"},
+                ),
+                "confidence": 0.0,
+                "requires_human_review": False,
+            }
         resp = await self.request("POST", endpoint, json_body={"product_id": 1, "quantity": -5, "price": 0.01})
         vulnerable = resp.get("status") in {200, 201}
         return {
@@ -31,6 +46,21 @@ class LogicBugAgent(BaseAgent):
 
     async def _probe_workflow_skip(self, endpoint: str) -> Dict[str, Any]:
         """Test direct transition to a privileged workflow step."""
+        if not self.check_scope(endpoint):
+            return {
+                "vuln_type": "workflow_bypass",
+                "severity": "info",
+                "endpoint": endpoint,
+                "parameter": "step",
+                "evidence": self.build_evidence(
+                    method="POST",
+                    request_url=endpoint,
+                    response_snippet="out_of_scope",
+                    extra={"skipped": "out_of_scope"},
+                ),
+                "confidence": 0.0,
+                "requires_human_review": False,
+            }
         resp = await self.request("POST", endpoint, json_body={"step": "complete", "order_id": "123"})
         vulnerable = resp.get("status") in {200, 202}
         return {
@@ -50,6 +80,21 @@ class LogicBugAgent(BaseAgent):
 
     async def _probe_role_escalation(self, endpoint: str) -> Dict[str, Any]:
         """Test role parameter tampering for privilege escalation."""
+        if not self.check_scope(endpoint):
+            return {
+                "vuln_type": "privilege_escalation",
+                "severity": "info",
+                "endpoint": endpoint,
+                "parameter": "role",
+                "evidence": self.build_evidence(
+                    method="POST",
+                    request_url=endpoint,
+                    response_snippet="out_of_scope",
+                    extra={"skipped": "out_of_scope"},
+                ),
+                "confidence": 0.0,
+                "requires_human_review": False,
+            }
         resp = await self.request("POST", endpoint, json_body={"role": "admin"})
         vulnerable = resp.get("status") in {200, 204}
         return {

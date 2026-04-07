@@ -36,15 +36,9 @@ class ValidatorAgent(BaseAgent):
         return success == 3
 
     def _scope_gate(self, finding: Dict[str, Any]) -> bool:
-        """Gate 2: pass when scope is valid or evidence has request triage fields."""
+        """Gate 2: enforce in-scope endpoint requirement."""
         endpoint = str(finding.get("endpoint", ""))
-        if self.check_scope(endpoint):
-            return True
-        evidence = finding.get("evidence", {})
-        if not isinstance(evidence, dict):
-            return False
-        required = {"status_code", "response_snippet", "request_url"}
-        return all(field in evidence for field in required)
+        return self.check_scope(endpoint)
 
     async def _dedup_gate(self, finding: Dict[str, Any], existing: List[Dict[str, Any]]) -> bool:
         """Gate 3: reject findings that match prior vuln+endpoint+parameter tuple."""
@@ -71,13 +65,17 @@ class ValidatorAgent(BaseAgent):
         """Validate provided findings through all gates."""
         validated: List[Dict[str, Any]] = []
         existing = await self.read_findings()
+        if self.run_id:
+            prior = [item for item in existing if str(item.get("run_id", "")) != self.run_id]
+        else:
+            prior = existing
 
         for finding in findings:
             if not await self._reproduce(finding):
                 continue
             if not self._scope_gate(finding):
                 continue
-            if not await self._dedup_gate(finding, existing):
+            if not await self._dedup_gate(finding, prior):
                 continue
             enriched = self._cvss_gate(dict(finding))
             validated.append(enriched)
@@ -95,7 +93,8 @@ class ValidatorAgent(BaseAgent):
                     "scope_confirmation",
                     "deduplication",
                     "cvss_scoring",
-                ]
+                ],
+                "prior_findings_considered": len(prior),
             },
         )
 
