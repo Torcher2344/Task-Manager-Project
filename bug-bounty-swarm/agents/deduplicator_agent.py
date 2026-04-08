@@ -10,6 +10,24 @@ from agents.base_agent import BaseAgent
 class DeduplicatorAgent(BaseAgent):
     """Flags duplicates by vulnerability class, endpoint, and parameter."""
 
+    def _normalize_existing_findings(self, raw_findings: Any) -> List[Dict[str, Any]]:
+        """Coerce persisted notes into a safe list[dict] structure."""
+        if not isinstance(raw_findings, list):
+            self.log(f"dedup_notes_unexpected_type: {type(raw_findings).__name__}")
+            return []
+
+        normalized: List[Dict[str, Any]] = []
+        dropped = 0
+        for item in raw_findings:
+            if isinstance(item, dict):
+                normalized.append(item)
+            else:
+                dropped += 1
+
+        if dropped:
+            self.log(f"dedup_notes_invalid_entries_dropped: {dropped}")
+        return normalized
+
     def _key(self, finding: Dict[str, Any]) -> Tuple[str, str, str]:
         """Build dedup key for a finding."""
         return (
@@ -20,7 +38,7 @@ class DeduplicatorAgent(BaseAgent):
 
     async def run_with_findings(self, findings: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Return only unique findings compared to prior notes and current batch."""
-        existing = await self.read_findings()
+        existing = self._normalize_existing_findings(await self.read_findings())
         if self.run_id:
             prior = [item for item in existing if str(item.get("run_id", "")) != self.run_id]
         else:

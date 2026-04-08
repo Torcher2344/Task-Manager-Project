@@ -124,6 +124,42 @@ class RunIdPipelineTests(unittest.IsolatedAsyncioTestCase):
             result = await agent.run_with_findings([finding])
             self.assertEqual(result["findings"], [])
 
+    async def test_deduplicator_handles_non_list_notes_payload(self) -> None:
+        """Deduplicator should not crash when notes.json contains a JSON object."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            loot = root / "loot"
+            loot.mkdir(parents=True, exist_ok=True)
+            notes_path = loot / "notes.json"
+            notes_path.write_text('{"unexpected": "shape"}', encoding="utf-8")
+
+            agent = DummyDedupAgent(target="target.tld", config=_agent_config(root, "run-900"))
+            result = await agent.run_with_findings(
+                [{"vuln_type": "xss", "endpoint": "https://target.tld/search", "parameter": "q"}]
+            )
+            self.assertEqual(len(result["findings"]), 1)
+
+    async def test_validator_handles_non_list_notes_payload(self) -> None:
+        """Validator should not crash when notes.json contains a JSON object."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            loot = root / "loot"
+            loot.mkdir(parents=True, exist_ok=True)
+            notes_path = loot / "notes.json"
+            notes_path.write_text('{"unexpected": "shape"}', encoding="utf-8")
+
+            finding = {
+                "vuln_type": "idor",
+                "severity": "high",
+                "endpoint": "https://target.tld/api/user/2",
+                "parameter": "path_or_query_id",
+                "evidence": {"status_code": 200, "response_snippet": "ok", "request_url": "https://target.tld/api/user/2"},
+            }
+            agent = DummyValidatorAgent(target="target.tld", config=_agent_config(root, "run-901"))
+            result = await agent.run_with_findings([finding])
+            self.assertEqual(len(result["findings"]), 1)
+            self.assertEqual(result["findings"][0]["cvss_base"], 8.0)
+
 
 class RunIdConfigTests(unittest.TestCase):
     """Configuration tests for run-id generation and persistence."""
