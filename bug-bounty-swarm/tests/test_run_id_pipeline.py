@@ -48,6 +48,7 @@ class DummyArgs:
         self.no_submit = True
         self.vuln = None
         self.scope_file = None
+        self.target = "example.com"
 
 
 class RunIdPipelineTests(unittest.IsolatedAsyncioTestCase):
@@ -169,6 +170,25 @@ class RunIdConfigTests(unittest.TestCase):
         config = build_config(DummyArgs())
         self.assertIn("run_id", config)
         self.assertTrue(str(config["run_id"]).strip())
+
+    def test_build_config_warns_when_anthropic_key_missing(self) -> None:
+        """CLI build should warn when ANTHROPIC_API_KEY is absent."""
+        import io
+        import os
+        from contextlib import redirect_stderr
+
+        prior = os.environ.pop("ANTHROPIC_API_KEY", None)
+        try:
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                _ = build_config(DummyArgs())
+        finally:
+            if prior is not None:
+                os.environ["ANTHROPIC_API_KEY"] = prior
+            else:
+                os.environ.pop("ANTHROPIC_API_KEY", None)
+
+        self.assertIn("ANTHROPIC_API_KEY is not set", stderr.getvalue())
 
 
 class SessionLogPathTests(unittest.TestCase):

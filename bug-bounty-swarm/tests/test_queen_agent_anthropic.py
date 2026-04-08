@@ -78,7 +78,7 @@ class QueenAgentAnthropicTests(unittest.IsolatedAsyncioTestCase):
                 async def close(self) -> None:
                     return None
 
-            with patch("anthropic.AsyncAnthropic", _FakeClient):
+            with patch("agents.queen_agent.AsyncAnthropic", _FakeClient):
                 result = await agent._anthropic_chain_hint([{"vuln_type": "xss"}])
 
             self.assertEqual(result.get("chained_paths"), ["a->b"])
@@ -101,11 +101,60 @@ class QueenAgentAnthropicTests(unittest.IsolatedAsyncioTestCase):
                 async def close(self) -> None:
                     return None
 
-            with patch("anthropic.AsyncAnthropic", _FakeClient):
+            with patch("agents.queen_agent.AsyncAnthropic", _FakeClient):
                 result = await agent._anthropic_chain_hint([{"vuln_type": "ssrf"}])
 
             self.assertEqual(result.get("chained_paths"), [])
             self.assertIn("connection error", str(result.get("note", "")).lower())
+
+    async def test_chain_hint_handles_missing_api_key_gracefully(self) -> None:
+        """Missing API key should return empty chains with explanatory note."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            agent = _build_agent(root)
+            prior = os.environ.pop("ANTHROPIC_API_KEY", None)
+            try:
+                result = await agent._anthropic_chain_hint([{"vuln_type": "idor"}])
+            finally:
+                if prior is not None:
+                    os.environ["ANTHROPIC_API_KEY"] = prior
+                else:
+                    os.environ.pop("ANTHROPIC_API_KEY", None)
+
+            self.assertEqual(result.get("chained_paths"), [])
+            self.assertIn("no api key", str(result.get("note", "")).lower())
+
+    async def test_chain_hint_uses_expected_anthropic_call_format(self) -> None:
+        """Anthropic call should use configured model and expected payload keys."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            agent = _build_agent(root, extra_config={"anthropic_api_key": "test-key"})
+            captured: dict[str, object] = {}
+
+            class _FakeMessage:
+                def __init__(self) -> None:
+                    self.content = [{"type": "text", "text": '{"chained_paths": []}'}]
+
+            class _FakeMessages:
+                async def create(self, **kwargs: object) -> _FakeMessage:
+                    captured.update(kwargs)
+                    return _FakeMessage()
+
+            class _FakeClient:
+                def __init__(self, **_: object) -> None:
+                    self.messages = _FakeMessages()
+
+                async def close(self) -> None:
+                    return None
+
+            with patch("agents.queen_agent.AsyncAnthropic", _FakeClient):
+                _ = await agent._anthropic_chain_hint([{"vuln_type": "xss", "endpoint": "/search"}])
+
+            self.assertEqual(captured.get("model"), QueenAgent.DEFAULT_ANTHROPIC_MODEL)
+            self.assertEqual(captured.get("max_tokens"), 500)
+            self.assertEqual(captured.get("temperature"), 0)
+            self.assertIsInstance(captured.get("messages"), list)
+            self.assertTrue(captured.get("messages"))
 
 
 if __name__ == "__main__":

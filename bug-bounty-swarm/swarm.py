@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import json
 import re
+import os
 import sys
 import uuid
 from pathlib import Path
@@ -67,6 +68,14 @@ def parse_args() -> argparse.Namespace:
 
 def build_config(args: argparse.Namespace) -> Dict[str, Any]:
     """Build runtime config from defaults and CLI flags."""
+    # Warn if Anthropic API key is not configured
+    if not os.getenv("ANTHROPIC_API_KEY", ""):
+        print(
+            "[WARN][swarm] ANTHROPIC_API_KEY is not set. "
+            "LLM-assisted vulnerability chaining will be disabled. "
+            "Set the env var or add anthropic_api_key to config to enable it.",
+            file=sys.stderr,
+        )
     config: Dict[str, Any] = dict(DEFAULT_CONFIG)
     config["run_id"] = str(uuid.uuid4())
     config["mode"] = args.mode

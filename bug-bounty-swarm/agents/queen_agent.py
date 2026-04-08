@@ -21,9 +21,15 @@ from agents.ssrf_agent import SSRFAgent
 from agents.validator_agent import ValidatorAgent
 from agents.xss_agent import XSSAgent
 
+try:
+    from anthropic import AsyncAnthropic
+except Exception:  # pragma: no cover - exercised in environments without SDK
+    AsyncAnthropic = None  # type: ignore[assignment]
+
 
 class QueenAgent(BaseAgent):
     """Top-level planner that coordinates recon, hunting, validation, and reporting."""
+    DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-5"
 
     @staticmethod
     def _safe_float(value: Any, default: float) -> float:
@@ -158,10 +164,8 @@ class QueenAgent(BaseAgent):
         if not api_key:
             return {"chained_paths": [], "note": "Anthropic disabled: no API key"}
 
-        try:
-            from anthropic import AsyncAnthropic
-        except Exception as exc:
-            self.log(f"anthropic_sdk_unavailable: {exc}")
+        if AsyncAnthropic is None:
+            self.log("anthropic_sdk_unavailable: import failed")
             return {"chained_paths": [], "note": "Anthropic disabled: SDK unavailable"}
 
         client = AsyncAnthropic(
@@ -176,7 +180,7 @@ class QueenAgent(BaseAgent):
                 f"{findings!r}"
             )
             message = await client.messages.create(
-                model=str(self.config.get("anthropic_model", "claude-3-5-sonnet-latest")),
+                model=str(self.config.get("anthropic_model", self.DEFAULT_ANTHROPIC_MODEL)),
                 max_tokens=500,
                 temperature=0,
                 messages=[{"role": "user", "content": prompt}],
