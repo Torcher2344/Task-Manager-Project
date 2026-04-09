@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from typing import Any, Dict, List
 
@@ -20,9 +21,91 @@ from agents.ssrf_agent import SSRFAgent
 from agents.validator_agent import ValidatorAgent
 from agents.xss_agent import XSSAgent
 
+try:
+    from anthropic import AsyncAnthropic
+except Exception:  # pragma: no cover - exercised in environments without SDK
+    AsyncAnthropic = None  # type: ignore[assignment]
+
 
 class QueenAgent(BaseAgent):
     """Top-level planner that coordinates recon, hunting, validation, and reporting."""
+    DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-5"
+
+    @staticmethod
+    def _safe_float(value: Any, default: float) -> float:
+        """Convert config-like value to float with fallback."""
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _safe_int(value: Any, default: int) -> int:
+        """Convert config-like value to int with fallback."""
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    def _resolve_anthropic_api_key(self) -> str:
+        """Resolve Anthropic API key from config, .env, or process env."""
+        configured = str(self.config.get("anthropic_api_key", "")).strip()
+        if configured:
+            return configured
+
+        env_path = self.root_dir / "config" / ".env"
+        if env_path.exists():
+            try:
+                from dotenv import load_dotenv
+
+                load_dotenv(dotenv_path=env_path, override=False)
+            except Exception as exc:
+                self.log(f"anthropic_dotenv_load_error: {exc}")
+
+        return str(os.getenv("ANTHROPIC_API_KEY", "")).strip()
+
+    def _extract_anthropic_text(self, content: Any) -> str:
+        """Extract human-readable text from Anthropic message content blocks."""
+        if isinstance(content, str):
+            return content.strip()
+        if isinstance(content, list):
+            chunks: List[str] = []
+            for block in content:
+                if isinstance(block, dict):
+                    text = block.get("text")
+                else:
+                    text = getattr(block, "text", None)
+                if text:
+                    chunks.append(str(text))
+            if chunks:
+                return "\n".join(chunks).strip()
+        return str(content).strip()
+
+    def _parse_chain_hints(self, llm_text: str) -> Dict[str, Any]:
+        """Parse JSON-like chain hints while tolerating plain-text responses."""
+        cleaned = self.clean_json_response(llm_text)
+        if not cleaned:
+            return {"chained_paths": [], "llm_hint": ""}
+
+        try:
+            payload = json.loads(cleaned)
+        except json.JSONDecodeError:
+            return {"chained_paths": [], "llm_hint": llm_text}
+
+        if isinstance(payload, dict):
+            chains = payload.get("chained_paths", [])
+            if not isinstance(chains, list):
+                chains = []
+            result: Dict[str, Any] = {"chained_paths": chains}
+            note = payload.get("note")
+            if note:
+                result["note"] = str(note)
+            llm_hint = payload.get("llm_hint", "")
+            if llm_hint:
+                result["llm_hint"] = str(llm_hint)
+            return result
+
+        return {"chained_paths": [], "llm_hint": llm_text}
 
     def _selected_agents(self) -> List[type[BaseAgent]]:
         """Resolve hunter agent list by mode and vuln filters."""
@@ -77,29 +160,44 @@ class QueenAgent(BaseAgent):
 
     async def _anthropic_chain_hint(self, findings: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Optional Anthropic-assisted vuln chaining hints."""
-        api_key = os.getenv("ANTHROPIC_API_KEY", "")
+        api_key = self._resolve_anthropic_api_key()
         if not api_key:
             return {"chained_paths": [], "note": "Anthropic disabled: no API key"}
 
-        try:
-            from anthropic import Anthropic
+        if AsyncAnthropic is None:
+            self.log("anthropic_sdk_unavailable: import failed")
+            return {"chained_paths": [], "note": "Anthropic disabled: SDK unavailable"}
 
-            client = Anthropic(api_key=api_key)
+        client = AsyncAnthropic(
+            api_key=api_key,
+            timeout=self._safe_float(self.config.get("anthropic_timeout", 20), 20.0),
+            max_retries=max(0, self._safe_int(self.config.get("anthropic_max_retries", 1), 1)),
+        )
+        try:
             prompt = (
                 "You are a security triage planner. Analyze these findings and suggest "
                 "possible vulnerability chains in concise JSON. Findings:\n"
                 f"{findings!r}"
             )
-            message = client.messages.create(
-                model="claude-3-5-sonnet-latest",
+            message = await client.messages.create(
+                model=str(self.config.get("anthropic_model", self.DEFAULT_ANTHROPIC_MODEL)),
                 max_tokens=500,
                 temperature=0,
                 messages=[{"role": "user", "content": prompt}],
             )
-            return {"chained_paths": [], "llm_hint": str(message.content)}
+            llm_text = self._extract_anthropic_text(getattr(message, "content", ""))
+            parsed = self._parse_chain_hints(llm_text)
+            if not parsed.get("llm_hint"):
+                parsed["llm_hint"] = llm_text
+            return parsed
         except Exception as exc:
-            self.log(f"anthropic_hint_error: {exc}")
-            return {"chained_paths": [], "note": f"Anthropic error: {exc}"}
+            self.log(f"anthropic_hint_error: {exc.__class__.__name__}: {exc}")
+            return {"chained_paths": [], "note": f"Anthropic connection error: {exc}"}
+        finally:
+            try:
+                await client.close()
+            except Exception:
+                pass
 
     async def run(self) -> Dict[str, Any]:
         """Execute planner workflow across all swarm phases."""
